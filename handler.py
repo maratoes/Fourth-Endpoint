@@ -1,56 +1,41 @@
 import os
-import shutil
-import subprocess
-import threading
-import time
 from typing import Any, Dict
 
-import requests
 import runpod
+from vllm import LLM, SamplingParams
+
+model = None
 
 
-def start_max_server() -> None:
-    model_path = os.getenv("MODEL_PATH", "modularai/Qwen3-4B-Instruct-GGUF")
-    cmd = ["max", "serve", f"--model-path={model_path}", "--port=8000"]
-    if shutil.which("max") is None:
-        raise RuntimeError("`max` CLI not found in PATH; Modular MAX is not installed correctly.")
-    subprocess.Popen(cmd)
-
-
-threading.Thread(target=start_max_server, daemon=True).start()
-
-# Model download / load can exceed 30s on first boot.
-deadline = time.time() + int(os.getenv("MAX_BOOT_WAIT", "600"))
-while True:
-    try:
-        # Port open check
-        r = requests.get("http://localhost:8000", timeout=2)
-        # Any HTTP response means the server is up.
-        _ = r.status_code
-        break
-    except Exception:
-        if time.time() >= deadline:
-            break
-        time.sleep(5)
-
-MAX_URL = "http://localhost:8000/v1/completions"
+def initialize_model() -> LLM:
+    global model
+    if model is not None:
+        return model
+    model = LLM(
+        model=os.getenv("MODEL_NAME", "Qwen/Qwen3-4B-Instruct"),
+        trust_remote_code=True,
+        max_model_len=int(os.getenv("MAX_MODEL_LEN", "4096")),
+        tensor_parallel_size=int(os.getenv("TENSOR_PARALLEL_SIZE", "1")),
+        gpu_memory_utilization=float(os.getenv("GPU_MEMORY_UTILIZATION", "0.90")),
+    )
+    return model
 
 
 def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     try:
         data = job.get("input", {})
-        payload = {
-            "model": "qwen3-4b",
-            "prompt": data.get("prompt", ""),
-            "max_tokens": data.get("max_tokens", 100),
-            "temperature": data.get("temperature", 0.7),
-        }
-        response = requests.post(MAX_URL, json=payload, timeout=30)
-        response.raise_for_status()
-        result = response.json()
-        return {"output": result["choices"][0]["text"], "status": "success"}
+        prompt = data.get("prompt", "")
+        sampling = SamplingParams(
+            max_tokens=data.get("max_tokens", 64),
+            temperature=data.get("temperature", 0.7),
+            top_p=data.get("top_p", 0.95),
+        )
+        outputs = model.generate([prompt], sampling)
+        return {"output": outputs[0].outputs[0].text, "status": "success"}
     except Exception as exc:
         return {"error": str(exc), "status": "error"}
 
 
+initialize_model()
 runpod.serverless.start({"handler": handler})
+
