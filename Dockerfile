@@ -7,10 +7,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Modular properly so the `max` CLI exists.
-# The simple `pip install modular` frequently does not provide `max` in minimal images.
-RUN curl -fsSL https://get.modular.com | sh
-ENV PATH="/root/.modular/bin:${PATH}"
+# Install Modular CLI, then use it to install MAX so `max` exists.
+RUN pip install --no-cache-dir modular
 RUN modular --version && modular install max && max --version
 
 RUN pip install --no-cache-dir runpod==1.7.0 requests
