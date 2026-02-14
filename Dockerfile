@@ -7,11 +7,14 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# System pip on Ubuntu can be old and occasionally breaks dependency resolution.
+RUN python3.10 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
 # Install Modular CLI, then use it to install MAX so `max` exists.
-RUN pip install --no-cache-dir modular
+RUN python3.10 -m pip install --no-cache-dir modular
 RUN modular --version && modular install max && max --version
 
-RUN pip install --no-cache-dir runpod==1.7.0 requests
+RUN python3.10 -m pip install --no-cache-dir runpod==1.7.0 requests
 
 WORKDIR /app
 COPY handler.py .
