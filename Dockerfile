@@ -10,9 +10,11 @@ RUN apt-get update && apt-get install -y \
 # System pip on Ubuntu can be old and occasionally breaks dependency resolution.
 RUN python3.10 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install Modular CLI, then use it to install MAX so `max` exists.
-RUN python3.10 -m pip install --no-cache-dir modular
-RUN modular --version && modular install max && max --version
+# Install Modular toolchain (provides `modular` + `max`).
+# The installer script expects bash (not /bin/sh).
+RUN curl -fsSL https://get.modular.com | bash
+ENV PATH="/root/.modular/bin:${PATH}"
+RUN /root/.modular/bin/modular --version && /root/.modular/bin/modular install max && /root/.modular/bin/max --version
 
 RUN python3.10 -m pip install --no-cache-dir runpod==1.7.0 requests
 
